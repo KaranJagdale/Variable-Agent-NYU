@@ -23,6 +23,10 @@ t_bo = 5; %boarding time per passenger in seconds
 t_al = 2; %Alighting time per passenger in seconds
 stsk = zeros(1,n_s);
 bsk = zeros(1,n_b);
+w_pass = zeros(4,n_s); %to store the number of walking passengers to a particular stop
+%at max there can be 4 types of passengers walking towards a particular
+%stop
+tw_pass = zeros(4,n_s); %time to reach the next stop
 
 gam_k = 2; gam_theta = 2; %parameters of Gamma rv
 
@@ -59,6 +63,8 @@ State2 = state(:,1);
 State3 = state(:,2);
 loc1 = state(1,1); loc2 = state(1,1); loc3 = state(1,2); loc4 = state(1,2);
 locf1 = loc1;
+pe_cum = 0;
+Pe_cum = 0;
 Pd_cum = 0;
 Pa_cum = 0;
 Pb_cum = 0;
@@ -103,6 +109,19 @@ while true
                 t_nxt(i) = t_nxt(i) - t_nxt(im);  %nxt for im will be calculated as the stop time at the stop
             end       
     end
+
+    for i= 1:4
+        for j = 1:n_s
+            if w_pass(i,j) ~=0
+                tw_pass(i,j) = tw_pass(i,j) - t_nxt(im);
+                if tw_pass(i,j) < 0 || tw_pass(i,j) == 0
+                    pe_cum = pe_cum + w_pass(i,j);
+                    w_pass(i,j) = 0;
+                    tw_pass(i,j) = 0;
+                end
+            end
+        end
+    end
     
 
     if atstop(im) == 0
@@ -119,7 +138,7 @@ while true
 %             lapass = 0;
 %         end
         
-        %acap: accomodating ,kjyjtcapacity
+        %acap: accomodating capacity
         acap = cap_bus - state(2,im);
     
         %lpass: for now ignoring the left over passengers
@@ -147,8 +166,23 @@ while true
                 action = 'stop';
                 l_action(im) = 0;
                 pdsr = lapass(im) +  binornd((state(2,im)-lapass(im)),a_par(state(1,im)));
+                pd_cum = pd_cum + pdsr;  
+                pe_cum = pe_cum + pdsr - lapass(im);
+                stmin = iminus(state(1,im),n_s); %number of bus stop before this stop
+                for iw=1:4
+                    if w_pass(iw,stmin) == 0
+                        break
+                    end
+                end
+                
+                if prod(w_pass(:,stmin)) ~=0
+                    disp('damn... this is not working')
+                    break
+                end
+                w_pass(iw,stmin) = lapass(im); %If the deboarding passengers is more than unit capacity then the left over passengers gets priority for deboarding
+                tw_pass(iw,stmin) = dis_stp(stmin)/v_pas;
                 lapass(im) = 0;
-                pd_cum = pd_cum + pdsr;                
+                
                 state(2,im) = state(2,im) - pdsr;
                 pa = poissrnd(arr_par(state(1,im))*hw(im));
                 %disp(pa)
@@ -199,6 +233,7 @@ while true
     Pd_cum = [Pd_cum pd_cum];
     Pb_cum = [Pb_cum pb_cum];
     Pw_cum = [Pw_cum pw_cum];
+    Pe_cum = [Pe_cum pe_cum];
     if n_b == 2
         bus_loc = [state(1,1) state(1,1) state(1,2) state(1,2)];
         atstopf = [atstop(1) atstop(1) atstop(2) atstop(2)];
@@ -277,13 +312,17 @@ while true
         
         %For now we are going forward with formulation such that the join
         %action will be considered only if the stop action has taken by the bus
-        %in the front.    
+        %in the front.  
+        if pd_cum < pe_cum
+            disp('scam')
+        end
 end 
 %now finding the area under the curves
 Pb_cum_int = trapz(Time, Pb_cum);
 Pd_cum_int = trapz(Time, Pd_cum);
 Pa_cum_int = trapz(Time, Pa_cum);
 Pw_cum_int = trapz(Time, Pw_cum);
+Pe_cum_int = trapz(Time, Pe_cum);
 % for i=(Pb_cum - Pd_cum)
 %     if i<0
 %         disp('scam')
@@ -296,10 +335,11 @@ avg_inveh = (Pb_cum_int - Pd_cum_int)/Pb_cum(size(Pb_cum,2));
 avg_wait = (Pa_cum_int - Pb_cum_int)/Pa_cum(size(Pa_cum,2));
 
 avg_walk = Pw_cum_int/Pd_cum(size(Pd_cum,2));
+avg_walk1 = (Pd_cum_int - Pe_cum_int)/Pd_cum(size(Pd_cum,2));
 fprintf('Average in-vehicle time: %f \n', avg_inveh)
 fprintf('Average waiting time: %f \n', avg_wait)
-fprintf('Average walk time: %f \n', avg_walk)
-fprintf('Policy cost: %f \n', w_wait*avg_wait + avg_inveh + w_walk*avg_walk)
+fprintf('Average walk time: %f \n', avg_walk1)
+fprintf('Policy cost: %f \n', w_wait*avg_wait + avg_inveh + w_walk*avg_walk1)
 
 figure(1)
 plot(Time1, loc1)
@@ -334,8 +374,14 @@ plot(Time, Pb_cum)
 hold on
 plot(Time, Pa_cum)
 plot(Time, Pd_cum)
-plot(Time, Pw_cum)
-legend('boarding', 'awaiting','de-boarding','walking')
+plot(Time, Pe_cum)
+legend('boarding', 'awaiting','de-boarding','exiting')
+
+% figure(7)
+% plot(Time, Pe_cum)
+% hold on
+% plot(Time, Pw_cum)
+% legend('e','w')
 %legend('boarding', 'de-boarding')
 % hold on
 % plot(Time, State2(1,:))
