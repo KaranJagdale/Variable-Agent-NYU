@@ -17,14 +17,17 @@ fixdt = 30; %fixed time lost per stop
 dis_stp = 300*(rand(1,n_s) + 1); %Distance between stops distributed between 300 - 600 meters
 v_bus = 20*5/18; % Speed of bus 20 Km/h
 w_wait = 2.1; w_walk = 2.2;% weights of walk time and wait time in final cost
-lapass = zeros(1,n_b); 
-
+lapass = zeros(1,n_b);
+w_pass = zeros(4,n_s); %to store the number of walking passengers to a particular stop
+%at max there can be 4 types of passengers walking towards a particular
+%stop
+tw_pass = zeros(4,n_s); %time to reach the next stop
 cap_bus = 50;
 unit_cap = cap_bus/2;
 v_pas = 5.4*5/18; %Passenger speed in Km/h
 t_bo = 5; %boarding time per passenger in seconds
 t_al = 2; %Alighting time per passenger in seconds
-
+scamcount = 0;
 gam_k = 2; gam_theta = 2; %parameters of Gamma rv
 
 cumtime = zeros(1,n_b);
@@ -61,6 +64,8 @@ State2 = state(:,1);
 State3 = state(:,2);
 loc1 = state(1,1); loc2 = state(1,1); loc3 = state(1,2); loc4 = state(1,2);
 locf1 = loc1;
+pe_cum = 0; %exiting passengers
+Pe_cum = 0;
 Pd_cum = 0;
 Pa_cum = 0;
 Pb_cum = 0;
@@ -100,13 +105,13 @@ while true
 %             end
 %     end
 
-    if gencount > 575 && gencount < 578
-                disp(gencount)
-                disp(hw)
-                disp(state)
-                disp(t_nxt)
-                disp(atstop)
-    end
+%     if gencount < 170
+%                 disp(gencount)
+%                 disp(hw)
+%                 disp(state)
+%                 disp(t_nxt)
+%                 disp(atstop)
+%     end
 
     [M,im] = min(t_nxt);  %This step finds which bus reaches/leaves the next stop first
     T = [T M];
@@ -116,6 +121,19 @@ while true
             if i ~= im
                 t_nxt(i) = t_nxt(i) - t_nxt(im);  %nxt for im will be calculated as the stop time at the stop
             end       
+    end
+
+    for i= 1:4
+        for j = 1:n_s
+            if w_pass(i,j) ~=0
+                tw_pass(i,j) = tw_pass(i,j) - t_nxt(im);
+                if tw_pass(i,j) < 0 || tw_pass(i,j) == 0
+                    pe_cum = pe_cum + w_pass(i,j);
+                    w_pass(i,j) = 0;
+                    tw_pass(i,j) = 0;
+                end
+            end
+        end
     end
     
 
@@ -204,8 +222,24 @@ while true
             pds_c = binornd((state(2,im)-lapass(im)),a_par(state(1,im))) + lapass(im);
             %Assuming that only the passengers getting down at the current stop
             %are in the rear module
+            stmin = iminus(state(1,im),n_s);
+            for iw=1:4
+                if w_pass(iw,stmin) == 0
+                    break
+                end
+            end
             
-            load_r = floor(pds_c);  %floor is not necessary but having it will not affect as well
+            if prod(w_pass(:,stmin)) ~=0
+                disp('damn... this is not working')
+                break
+            end
+            w_pass(iw,stmin) = lapass(im); %If the deboarding passengers are more than unit capacity then the left over passengers gets priority for deboarding
+            if w_pass(iw,stmin) ~=0
+
+                tw_pass(iw,stmin) = dis_stp(stmin)/v_pas;
+            end
+            
+            load_r = pds_c;  %floor is not necessary but having it will not affect as well
             lapassf = 0;
             if state(2,im) - load_r > unit_cap
                 load_r = state(2,im) - unit_cap;
@@ -214,17 +248,16 @@ while true
             if load_r > unit_cap
                 lapassf = load_r - unit_cap;
                 load_r = unit_cap;
-                
+                pds_c = load_r;    %as all passengers cannot deboard in this case               
             end
-            load_f = ceil(state(2,im) - load_r);
-%             if gencount == 400
-%                 fprintf('pds_c = %f \n',pds_c)
-%                 fprintf('load_f = %f \n',load_f)
-%             end
-%             if gencount == 1
-%                 disp('good')
-%             end
-            
+            pdsr = pds_c;
+            pd_cum = pd_cum + pdsr;
+            pe_cum = pe_cum + pdsr - lapass(im);
+            if gencount == 167
+                disp(load_r)
+            end
+            load_f = state(2,im) - load_r;
+
             state_i = zeros(n_st,n_b);
 
         
@@ -245,7 +278,7 @@ while true
                 atstop_i(i) = atstop(i);
             end
             atstop_i(im) = 0;
-            atstop_i(im + 1) = 1; %as rear module has stopped as the stop
+            atstop_i(im + 1) = 1; %as rear module has stopped at the stop
             for i = im + 2 : n_b
                 atstop_i(i) = atstop(i-1);
             end
@@ -273,8 +306,7 @@ while true
 %             if pdsr > state(2,im+1)  %pdsr is random so can be more than the number of passengers in the rear bus
 %                 pdsr = state(2,im+1);
 %             end
-            pdsr = pds_c;
-            pd_cum = pd_cum + pdsr;
+            
             
 %             if gencount == 1
 %                 disp(state)
@@ -298,6 +330,9 @@ while true
             %but, we haven't updated hw yet and headway for both im and
             %im+1 will be same as they were joined before
             bpass = arr_par(state(1,im+1))*hw(im);
+%             if gencount < 10
+%                 disp(state)
+%             end
             pa = poissrnd(bpass);
             pa_cum = pa_cum + pa;
             
@@ -346,9 +381,35 @@ while true
                 action = 'stop';
                 pdsr = lapass(im) + binornd((state(2,im) - lapass(im)),a_par(state(1,im)));
                 pd_cum = pd_cum + pdsr;
-                
+                pe_cum  = pe_cum + pdsr - lapass(im);
+                stmin = iminus(state(1,im),n_s);
+                for iw=1:4
+                    if w_pass(iw,stmin) == 0
+                        break
+                    end
+                end
+                if prod(w_pass(:,stmin)) ~=0
+                    disp('damn... this is not working')
+                    break
+                end
+                w_pass(iw,stmin) = lapass(im); %If the deboarding passengers is more than unit capacity then the left over passengers gets priority for deboarding
+                if w_pass(iw,stmin) ~=0
+                    tw_pass(iw,stmin) = dis_stp(stmin)/v_pas;
+                end
+% if gencount == 684
+%                     disp('heya')
+%                     disp(pbsr)
+%                     disp(pa)
+%                     disp(state(2,im) - lapass(im))
+%                     disp(pdsr)
+%                     disp(state)
+%                 end
                 lapass(im) = 0;
+                
                 state(2,im) = state(2,im) - pdsr;
+%                 if gencount < 10
+%                     disp(state)
+%                 end
                 pa = poissrnd(arr_par(state(1,im))*hw(im));
                 pa_cum = pa_cum + pa;
                 
@@ -356,6 +417,7 @@ while true
                 pb_cum = pb_cum + pbsr;
                 
                 state(2,im) = state(2,im) + pbsr;
+                
                 tspent = t_al*pdsr + t_bo*pbsr + fixdt + ex_wt;
                 %Updating t_nxt, atstop, 
                 atstop(im) = 1;
@@ -365,9 +427,13 @@ while true
 
                  
             else  %If skip action is taken then the time spent at the stop will be zero
-                pw = binornd(state(2,im),a_par(state(1,im))); %Number of passengers have to wal. Can modify this line to incorporate multiple skip leftover passengers
+                pw = binornd(state(2,im),a_par(state(1,im))); %Number of passengers have to walk. Can modify this line to incorporate multiple skip leftover passengers
                 pw_cum = pw_cum + pw;
                 lapass(im) = pw;
+                if gencount == 682
+                    disp(lapass(im))
+                    disp(im)
+                end
                 skcount = skcount + 1;
                 action = 'skip';
                 tspent = 0 + ex_wt;
@@ -442,7 +508,7 @@ while true
                         lapass_i(i-1) = lapass(i);
                     end
                     lapass_i(n_b) = lapass(1)+ lapass(n_b+1);
-
+                    lapass = lapass_i;
 
                     %In this case the bus 2 will correspond to state(:,1)
                     ord_i = ord;
@@ -511,7 +577,9 @@ while true
                     for i=im+1:n_b
                         lapass_i(i) = lapass(i+1);
                     end
+                    lapass = lapass_i;
                 end
+                
 
         %If join is not feasible  
             else
@@ -532,6 +600,7 @@ while true
     Pd_cum = [Pd_cum pd_cum];
     Pb_cum = [Pb_cum pb_cum];
     Pw_cum = [Pw_cum pw_cum];
+    Pe_cum = [Pe_cum pe_cum];
     if n_b == 2
         bus_loc = [state(1,1) state(1,1) state(1,2) state(1,2)];
         atstopf = [atstop(1) atstop(1) atstop(2) atstop(2)];
@@ -586,9 +655,9 @@ while true
     if gencount == 1000
         break
     end
-    count = count + 1;
+    %count = count + 1;
 
-%     if gencount < 5       
+%     if gencount < 686 && gencount > 678    
 %         fprintf('%s action on module %d \n', action, im)
 %         fprintf('module %d spends time %f with extra time %f \n', im, tspent, ex_wt)
 %         fprintf('state at t = %d \n', time)
@@ -600,6 +669,10 @@ while true
 %         disp(t_nxt)
 %         disp(gencount)
 %     end
+%     if gencount < 10
+%         disp(tw_pass)
+%         disp(w_pass)
+%     end
 
 
     
@@ -610,21 +683,30 @@ while true
         
         %For now we are going forward with formulation such that the join
         %action will be considered only if the stop action has taken by the bus
-        %in the front.    
+        %in the front. 
+        if pd_cum < pe_cum
+            disp('scam')
+            disp(tw_pass)
+            disp(w_pass)
+            break
+            scamcount = scamcount + 1;
+        end
 end 
 %now finding the area under the curves
 Pb_cum_int = trapz(Time, Pb_cum);
 Pd_cum_int = trapz(Time, Pd_cum);
 Pa_cum_int = trapz(Time, Pa_cum);
 Pw_cum_int = trapz(Time, Pw_cum);
+Pe_cum_int = trapz(Time, Pe_cum);
 
 avg_inveh = (Pb_cum_int - Pd_cum_int)/Pb_cum(size(Pb_cum,2));
 avg_wait = (Pa_cum_int - Pb_cum_int)/Pa_cum(size(Pa_cum,2));
-avg_walk = Pw_cum_int/Pd_cum(size(Pd_cum,2));
+avg_walk = Pw_cum_int/Pd_cum(size(Pd_cum,2)); %this formulation is wrong
+avg_walk1 = (Pd_cum_int - Pe_cum_int)/Pd_cum(size(Pd_cum,2));
 fprintf('Average in-vehicle time: %f \n', avg_inveh)
 fprintf('Average waiting time: %f \n', avg_wait)
-fprintf('Average walk time: %f \n', avg_walk)
-fprintf('Policy cost: %f \n', w_wait*avg_wait + avg_inveh + w_walk*avg_walk)
+fprintf('Average walk time: %f \n', avg_walk1)
+fprintf('Policy cost: %f \n', w_wait*avg_wait + avg_inveh + w_walk*avg_walk1)
 
 figure(1)
 plot(Time1, loc1)
@@ -659,8 +741,8 @@ plot(Time, Pb_cum)
 hold on
 plot(Time, Pa_cum)
 plot(Time, Pd_cum)
-plot(Time, Pw_cum)
-legend('boarding', 'awaiting','de-boarding','walking')
+plot(Time, Pe_cum)
+legend('boarding', 'awaiting','de-boarding','exiting')
 % hold on
 % plot(Time, State2(1,:))
 %plot()
