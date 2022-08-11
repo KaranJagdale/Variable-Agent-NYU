@@ -801,7 +801,7 @@ while true
         %passengers have boarded and deboarded at the stop.
         
         %For now we are going forward with formulation such that the join
-        %action will be considered only if the stop action has taken by the bus
+        %action will be considered only if the stop action has taken by the bu
         %in the front. 
         if pd_cum < pe_cum
             disp('scam')
