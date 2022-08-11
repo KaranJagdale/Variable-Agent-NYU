@@ -32,7 +32,7 @@ tw_pass = zeros(4,n_s); %time to reach the next stop
 cap_bus = 50;
 unit_cap = cap_bus/2;
 v_pas = 5.4*5/18; %Passenger speed in Km/h
-t_bo = 5; %boarding time per passenger in seconds
+t_bo = 5; %boarding time per passenger in second
 t_al = 2; %Alighting time per passenger in seconds
 scamcount = 0;
 gam_k = 2; gam_theta = 2; %parameters of Gamma rv
