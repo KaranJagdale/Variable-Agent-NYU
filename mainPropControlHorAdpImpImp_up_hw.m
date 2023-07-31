@@ -8,7 +8,7 @@ close all
 %but at this point of time we are assming that the bus not skipping stops
 %successively
 %dbstop if naninf
-nom = true;%change the boolian value to obtain performance of nominal or proposed policy
+nom = false;%change the boolian value to obtain performance of nominal or proposed policy
 
 tic;
 simtime = 3; %simulation time in hours
@@ -259,17 +259,7 @@ while true
         else
             state(1,im) = state(1,im) + 1; %state(1,im) is storing the last bus-stop number the bus has visited
         end
-        opt_act = rewsum_t(hor, state, t_nxt_sim, atstop, t_al, t_bo, arr_par, a_par, dis_stp, im, hway, v_bus, v_pas, lpass, lapass, cap_bus, hwt,ord, count, gencount, reachtime, leavetime, time,Hway, Pa_all_cum, fPas1, fPas2, jP1, jP2, ex_wt);
-        %opt_act = rewsum_expt(hor, state, t_nxt_sim, atstop, t_al, t_bo, arr_par, a_par, dis_stp, im, hway, v_bus, v_pas, lpass, lapass, cap_bus, hwt,ord, count, gencount);
-
-        optSeq = opt_act;
         bstop = state(1,im);
-        opt_act = str2num(opt_act(1));
-        
-        imr = opt_act + 1; %just a shift as the code below is written in terms of 
-        if nom
-            imr = 1;
-        end
         b_st = [];
         ex_wt = 0; %extra wait the bus has to do because of already reched buses
         %following lines find the max waiting time among the buses already
@@ -282,6 +272,18 @@ while true
                 end
             end
         end
+        opt_act = rewsum_t(hor, state, t_nxt_sim, atstop, t_al, t_bo, arr_par, a_par, dis_stp, im, hway, v_bus, v_pas, lpass, lapass, cap_bus, hwt,ord, count, gencount, reachtime, leavetime, time,Hway, Pa_all_cum, fPas1, fPas2, jP1, jP2, ex_wt);
+        %opt_act = rewsum_expt(hor, state, t_nxt_sim, atstop, t_al, t_bo, arr_par, a_par, dis_stp, im, hway, v_bus, v_pas, lpass, lapass, cap_bus, hwt,ord, count, gencount);
+
+        optSeq = opt_act;
+        
+        opt_act = str2num(opt_act(1));
+        
+        imr = opt_act + 1; %just a shift as the code below is written in terms of 
+        if nom
+            imr = 1;
+        end
+        
 %         if ex_wt > 0 && imr == 2
 %             disp('heya')
 %             disp(state)
