@@ -1,6 +1,7 @@
 function hw = headwaycuu(state, nxt, atstop, dis_stp, v_bus, n_b,count)
     hw = zeros(1,n_b);
-       
+%         disp('atstop')
+%         disp(atstop)
         for i=2:n_b
             
             if atstop(i)==0 && atstop(i-1) == 0

@@ -1,0 +1,38 @@
+function reward = Reward_expt(bus, state, action, hw, n_st, gamma, beta, hwt)
+    
+    n_b = size(state,2);
+    ipl = iplus(bus,n_b); %bus behind the current bus
+    stateb = state(:,ipl); %State is state of all the modules
+    state = state(:,bus);
+    %hw = hw(bus);
+    rskip = hw - gamma*hwt;
+    rstop = -rskip;
+    rsplit = hw - gamma*hwt;
+    if state(3) == 1 %to ensure split is favoured over skip if the bus is joined
+        rsplit = 1000000;
+    end
+
+    
+    bnst = iplus(stateb(1),n_st);
+    curst = state(1);
+    if stateb(1) == curst %|| bnst == curst 
+        rjoin = beta*hwt - hw;
+    else
+        rjoin = -1;
+    end
+    
+    switch action
+        case 0
+            reward = rstop;
+        case 1
+            reward = rskip;
+        case 2
+            reward = rsplit;
+        case 3
+            reward = rjoin;
+        case 4
+            reward = -rjoin;
+    end
+ end
+
+
